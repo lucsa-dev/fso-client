@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node \"/private/tmp/claude-501/-Users-lucasalmeida-Developments-fso-web/fbe1de76-0160-4ebc-b9c5-983f44f74f60/scratchpad/gen-map.mjs\")",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(curl -s http://localhost:5173/src/main.ts)",
+      "Bash(curl -s http://localhost:5173/assets/maps/starter.json)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('w',d['width'],'h',d['height'],'layers',[l['name'] for l in d['layers']],'spawn',d['spawnPoint']\\)\")",
+      "Bash(echo \"exit: $?\")",
+      "Bash(npx --yes playwright --version)",
+      "Bash(npm ls *)",
+      "Read(//Users/lucasalmeida/Library/Caches/**)",
+      "Bash(npx playwright *)",
+      "Bash(node \"/private/tmp/claude-501/-Users-lucasalmeida-Developments-fso-web/fbe1de76-0160-4ebc-b9c5-983f44f74f60/scratchpad/drive.mjs\")",
+      "Bash(lsof -ti:5173 -sTCP:LISTEN)",
+      "Bash(xargs -r kill)",
+      "Bash(npm uninstall *)",
+      "Bash(npm run *)",
+      "Bash(python3 -)",
+      "Bash(disown)",
+      "Bash(timeout 30 bash -c 'until curl -sf http://localhost:5173 >/dev/null; do sleep 1; done')",
+      "Bash(node -e \"require.resolve\\('playwright'\\)\")",
+      "Bash(npx --no-install playwright --version)",
+      "Bash(npx --no-install playwright install chromium)"
+    ]
+  }
+}
