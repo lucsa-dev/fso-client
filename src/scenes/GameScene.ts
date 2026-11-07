@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import type { MapData, MapCoord, GridPosition, MobTypeDef } from "@/types/MapTypes";
 import type { GameSceneData } from "@/types/GameTypes";
 import { Direction } from "@/types/GameTypes";
-import { ATTACK_COOLDOWN_MS, BOTTOM_BAR_HEIGHT_PX, DEBUG_TOGGLE_KEY, DEFAULT_MOB_SKIN, DEFAULT_PLAYER_SKIN, DEPTH, GATEWAY_WS_URL, isMobSkinId, isPlayerSkinId, MAP_CACHE_KEY, MAP_TRANSITION_DURATION_MS, MAP_TRANSITION_FADE_ALPHA, maxHpForLevel, maxXpForLevel, MOB_DRAG_DATA_TYPE, SAVE_MAP_ENDPOINT, SCENE_KEYS, mapDataUrl, type PlayerSkinId } from "@/utils/Constants";
+import { ATTACK_COOLDOWN_MS, BOTTOM_BAR_HEIGHT_PX, DEBUG_TOGGLE_KEY, DEFAULT_MOB_SKIN, DEFAULT_PLAYER_SKIN, DEPTH, GATEWAY_WS_URL, isMobSkinId, isPlayerSkinId, MAP_CACHE_KEY, MAP_TRANSITION_DURATION_MS, MAP_TRANSITION_FADE_ALPHA, maxHpForLevel, maxXpForLevel, MOB_DRAG_DATA_TYPE, resolveMobSize, SAVE_MAP_ENDPOINT, SCENE_KEYS, mapDataUrl, type PlayerSkinId } from "@/utils/Constants";
 import { PlayerSession } from "@/utils/PlayerSession";
 import { MapEditorSession } from "@/utils/MapEditorSession";
 import { MapManager } from "@/managers/MapManager";
@@ -507,6 +507,7 @@ export class GameScene extends Phaser.Scene {
       mapCoord: this.currentMapCoord,
       tile: this.player.getCurrentTile(),
       level: this.player.getLevel(),
+      hp: this.player.getHp(),
     });
   }
 
@@ -538,7 +539,8 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     const skin = isMobSkinId(payload.skin) ? payload.skin : DEFAULT_MOB_SKIN;
-    const mob = new Mob(this, { x: payload.x, y: payload.y }, this.mapManager.tileSize, payload.name, skin, {
+    const mobType = this.mapManager.getMobTypes().find((t) => t.id === payload.typeId);
+    const mob = new Mob(this, { x: payload.x, y: payload.y }, this.mapManager.tileSize, payload.name, skin, resolveMobSize(mobType?.size), {
       hp: payload.hp,
       maxHp: payload.maxHp,
     });
@@ -743,7 +745,7 @@ export class GameScene extends Phaser.Scene {
   /** Local-only visual for a just-placed mob spawn — not server-driven (see `handleCanvasDrop`'s doc). Tracked separately from `mobs` (which is exclusively server-driven) so it can't be confused with a real spawned instance, keyed by the same id as its MobSpawnDef so the eraser (see `handleMobErase`) and mob-type deletion (see `handleMobSpawnsRemoved`) can find and destroy it again, and cleared whenever the map itself is torn down/reloaded (see `clearMobEditorPreviews`). */
   private spawnMobEditorPreview(spawnId: string, mobType: MobTypeDef, tile: GridPosition): void {
     const skin = isMobSkinId(mobType.skin) ? mobType.skin : DEFAULT_MOB_SKIN;
-    const preview = new Mob(this, tile, this.mapManager.tileSize, mobType.name, skin, { hp: mobType.maxHp, maxHp: mobType.maxHp });
+    const preview = new Mob(this, tile, this.mapManager.tileSize, mobType.name, skin, resolveMobSize(mobType.size), { hp: mobType.maxHp, maxHp: mobType.maxHp });
     this.mobEditorPreviews.set(spawnId, preview);
   }
 
@@ -885,13 +887,25 @@ export class GameScene extends Phaser.Scene {
       this.setHoveredMob(null);
       return;
     }
-    this.setHoveredMob(this.findMobEntryAtTile(tile));
+    this.setHoveredMob(this.findMobEntryAtWorldPoint(this.pointerWorldPoint()));
   }
 
-  /** Linear scan over live mobs for whichever one currently occupies `tile` — small per-map mob counts make this cheap; there's no reverse tile->mob index to reuse (see Mob's class doc: a mob's tile only changes via server-driven movement). */
-  private findMobEntryAtTile(tile: GridPosition): [string, Mob] | null {
+  /** Pointer's current position translated into world space — used for pixel-accurate mob hit-testing (see `findMobEntryAtWorldPoint`) alongside the tile-quantized position `InputManager` already hands GameScene for movement/painting. */
+  private pointerWorldPoint(): Phaser.Math.Vector2 {
+    const pointer = this.input.activePointer;
+    return this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+  }
+
+  /**
+   * Linear scan over live mobs for whichever one's actual rendered bounds
+   * contain `point` — small per-map mob counts make this cheap. Hit-tests
+   * against the sprite's visual bounds rather than matching grid tiles
+   * (see Mob.containsWorldPoint's doc comment for why tile-matching left
+   * hover/click selection visibly offset from the art).
+   */
+  private findMobEntryAtWorldPoint(point: Phaser.Math.Vector2): [string, Mob] | null {
     for (const entry of this.mobs) {
-      if (GridUtils.equals(entry[1].getCurrentTile(), tile)) {
+      if (entry[1].containsWorldPoint(point.x, point.y)) {
         return entry;
       }
     }
@@ -1086,7 +1100,7 @@ export class GameScene extends Phaser.Scene {
     const playerTile = this.player.getCurrentTile();
     const mobTile = mob.getCurrentTile();
 
-    if (this.isAdjacentForAttack(playerTile, mobTile)) {
+    if (this.isAdjacentForAttack(playerTile, mobTile, mob.getAttackRangeTiles())) {
       if (!GridUtils.equals(playerTile, mobTile)) {
         this.player.faceDirection(this.directionBetween(playerTile, mobTile));
       }
@@ -1105,9 +1119,28 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** True if `a` and `b` are the same tile or orthogonal neighbors — mirrors the server's melee range (`ATTACK_RANGE_TILES = 1`: the attacker's own tile or one tile ahead in their facing direction, see Constants.ts). */
-  private isAdjacentForAttack(a: GridPosition, b: GridPosition): boolean {
-    return Math.abs(a.x - b.x) + Math.abs(a.y - b.y) <= 1;
+  /**
+   * True if `a` and `b` are the same tile, or share a row/column within
+   * `rangeTiles` of each other — mirrors the server's melee range
+   * (fso_web_server's zoneserver.inAttackRange: the attacker's own tile or
+   * up to `rangeTiles` tiles ahead in their facing direction, see
+   * mobAttackRangeTiles). Only meaningful once `faceDirection` below has
+   * pointed the player straight at `b`, same as the server facing itself
+   * toward its own target before checking range.
+   */
+  private isAdjacentForAttack(a: GridPosition, b: GridPosition, rangeTiles: number): boolean {
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    if (dx === 0 && dy === 0) {
+      return true;
+    }
+    if (dx === 0) {
+      return Math.abs(dy) <= rangeTiles;
+    }
+    if (dy === 0) {
+      return Math.abs(dx) <= rangeTiles;
+    }
+    return false;
   }
 
   /** Cardinal direction from `from` toward `to` — same dx/dy priority as Mob's/Player's private `directionBetween`. */
@@ -1185,7 +1218,7 @@ export class GameScene extends Phaser.Scene {
    * click now too.
    */
   private handleTileClick(clickedTile: GridPosition): void {
-    const mobEntry = this.findMobEntryAtTile(clickedTile);
+    const mobEntry = this.findMobEntryAtWorldPoint(this.pointerWorldPoint());
     if (mobEntry) {
       this.enterAttackMode(mobEntry[0]);
       return;
@@ -1487,6 +1520,13 @@ export class GameScene extends Phaser.Scene {
     this.savingIndicator.show();
     void this.saveMapData(this.currentMapCoord, this.mapManager.getMapData()).then(() => {
       this.savingIndicator.hide();
+      // Every mob placed this session just became real server-side (the
+      // save's reload_mobs round trip seeds it and broadcasts MobSpawned —
+      // see spawnMob). Without this, the local-only preview sprite lingers
+      // forever alongside the real one: duplicate mobs at save, and a ghost
+      // that isn't in mobIdsBySpawnId so the eraser/freeze logic never finds
+      // it again.
+      this.clearMobEditorPreviews();
       this.closeMapEditor();
     });
   }

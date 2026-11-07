@@ -10,6 +10,7 @@ import {
   MOB_STATIC_DISPLAY_SCALE,
   MOB_TILE_MOVE_DURATION_MS,
   MOB_WALK_FRAME_RATE,
+  mobAttackRangeTiles,
   PLAYER_DISPLAY_SCALE,
   PLAYER_ORIGIN,
   PLAYER_SPRITE,
@@ -110,6 +111,7 @@ export class Mob {
   private readonly scene: Phaser.Scene;
   private readonly tileSize: number;
   private readonly skin: MobSkinId;
+  private readonly size: number;
   private readonly pattern: "static" | "animated";
   private readonly nameLabel: Phaser.GameObjects.Text;
   private readonly hpBarBg: Phaser.GameObjects.Rectangle;
@@ -128,11 +130,13 @@ export class Mob {
     tileSize: number,
     name: string,
     skin: MobSkinId,
+    size: number,
     stats: MobStats,
   ) {
     this.scene = scene;
     this.tileSize = tileSize;
     this.skin = skin;
+    this.size = size;
     this.pattern = getMobSkinPattern(skin);
     this.currentTile = spawnTile;
     this.maxHp = stats.maxHp;
@@ -142,7 +146,7 @@ export class Mob {
     this.sprite = scene.add.sprite(worldPos.x, worldPos.y, skin, initialFrame);
     this.sprite.setName(name);
     this.sprite.setOrigin(PLAYER_ORIGIN.x, PLAYER_ORIGIN.y);
-    this.sprite.setScale(this.pattern === "animated" ? PLAYER_DISPLAY_SCALE : MOB_STATIC_DISPLAY_SCALE);
+    this.sprite.setScale((this.pattern === "animated" ? PLAYER_DISPLAY_SCALE : MOB_STATIC_DISPLAY_SCALE) * size);
     this.sprite.setDepth(DEPTH.PLAYER);
 
     this.nameLabel = scene.add.text(worldPos.x, worldPos.y, name, {
@@ -169,6 +173,26 @@ export class Mob {
 
   public getCurrentTile(): GridPosition {
     return this.currentTile;
+  }
+
+  /** How many tiles ahead this mob's melee reaches (see mobAttackRangeTiles) — used by GameScene's mouse-driven chase to know when to stop and swing instead of always requiring the attacker's own tile or one tile ahead. */
+  public getAttackRangeTiles(): number {
+    return mobAttackRangeTiles(this.size);
+  }
+
+  /**
+   * True if a world-space point falls within this mob's actual rendered
+   * bounds. Used for mouse hover/click hit-testing instead of comparing
+   * grid tiles: PLAYER_ORIGIN anchors the sprite near its feet and the
+   * frame's display height comfortably exceeds one tile, so the sprite's
+   * head renders into the tile row above `currentTile` while a swath of
+   * empty ground below its feet still sits inside `currentTile` — matching
+   * on the logical tile square left the hoverable area visibly shifted
+   * down from the art (unselectable head, selectable empty ground below
+   * the feet).
+   */
+  public containsWorldPoint(worldX: number, worldY: number): boolean {
+    return this.sprite.getBounds().contains(worldX, worldY);
   }
 
   /**
@@ -241,9 +265,21 @@ export class Mob {
    * mob's tile as a heartbeat-ish event even when adjacent ticks don't move
    * it, and successive real steps can arrive faster than one tile crossing's
    * tween duration.
+   *
+   * While the tab is backgrounded, Phaser's own game loop pauses (so queued
+   * tweens never drain) but the WebSocket keeps delivering moves, which
+   * would otherwise pile up in `pathQueue` and then replay back-to-back at
+   * full speed once the tab regains focus, reading as the mob suddenly
+   * sprinting. Snapping straight to each update instead keeps state in sync
+   * with zero backlog; normal tweened movement resumes on the next update
+   * once the tab is visible again.
    */
   public applyRemoteMove(tile: GridPosition): void {
     if (this.isSettledAt(tile) || this.isHeadingTo(tile)) {
+      return;
+    }
+    if (document.hidden) {
+      this.freezeAtTile(tile);
       return;
     }
     if (this.isMoving()) {

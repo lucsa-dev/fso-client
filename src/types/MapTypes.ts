@@ -54,6 +54,8 @@ export interface MobTypeDef {
   maxHp: number;
   /** Becomes a Chebyshev-distance radius around a placed spawn's tile once dropped on the map (see fso_web_server's zoneserver.MobState) — this is the mob's "região protegida". */
   defendedTiles: number;
+  /** Sprite scale in tiles/blocks (0.25 = 1/4 block, 5 = five blocks) — see MOB_SIZE_MIN/MAX in Constants.ts. Also drives melee attack reach (see ATTACK_RANGE_TILES's doc and fso_web_server's mobAttackRangeTiles), so a giant mob reaches farther and can be hit from farther away, per the mob system spec. */
+  size: number;
   /** XP a player's Player.gainXp receives for killing an instance of this type (see GameScene.handleMobDied). */
   xp: number;
   /** Seconds after being killed before one instance of this type reappears (see fso_web_server's zoneserver.scheduleRespawn). */

@@ -49,6 +49,8 @@ export interface JoinRequestPayload {
   tile: { x: number; y: number };
   /** Current character level (see Player.getLevel) — the zone has no persistent XP/level state of its own, so this is reported on every join purely to size PlayerState.MaxHP consistently with the client's own HP bar. */
   level: number;
+  /** Current HP (see Player.getHp) — reported for the same reason as `level`: Join is re-sent on every MapCoord crossing, not just first login, so without this the server would reset HP to full on every crossing while the client kept showing its last-known value, surfacing as an unexplained jump on the next damage/heal broadcast. */
+  hp: number;
 }
 
 export interface JoinAcceptedPayload {

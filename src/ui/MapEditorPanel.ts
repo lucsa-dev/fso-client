@@ -6,7 +6,7 @@ import {
   loadTilesetBlocks,
   type TilesetBlock,
 } from "@/utils/TilesetCatalog";
-import { DEFAULT_MOB_SKIN, EMPTY_TILE_INDEX, isMobSkinId, MAX_PAINT_LAYERS, MOB_DRAG_DATA_TYPE } from "@/utils/Constants";
+import { DEFAULT_MOB_SKIN, EMPTY_TILE_INDEX, isMobSkinId, MAX_PAINT_LAYERS, MOB_DRAG_DATA_TYPE, resolveMobSize } from "@/utils/Constants";
 import { MobEditorModal } from "@/ui/MobEditorModal";
 import { ConfirmDialog } from "@/ui/ConfirmDialog";
 import { createMobSkinThumbnail } from "@/utils/MobSkinAssets";
@@ -529,7 +529,7 @@ export class MapEditorPanel {
     nameEl.style.cssText = "font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;";
 
     const statsEl = document.createElement("div");
-    statsEl.textContent = `HP ${mobType.maxHp} · Força ${mobType.strength} · XP ${mobType.xp} · ${AGGRESSIVENESS_LABELS[mobType.aggressiveness]}`;
+    statsEl.textContent = `HP ${mobType.maxHp} · Força ${mobType.strength} · Tamanho ${resolveMobSize(mobType.size)}x · XP ${mobType.xp} · ${AGGRESSIVENESS_LABELS[mobType.aggressiveness]}`;
     statsEl.style.cssText = "font-size: 10px; color: #b6a887;";
 
     const spawnStatsEl = document.createElement("div");

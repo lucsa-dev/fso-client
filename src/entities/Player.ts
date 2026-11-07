@@ -331,8 +331,19 @@ export class Player {
     return this.pathQueue.length > 0 || this.activeTween !== null;
   }
 
-  /** Turns the player to face a direction in place, without moving — used when a step is blocked. */
+  /**
+   * Turns the player to face a direction in place, without moving — used
+   * when a step is blocked, and every idle tick of mouse-driven attack-follow
+   * mode to keep facing a mob that isn't on the player's own tile (see
+   * GameScene's `updateAttackMode`). No-ops when already facing that way:
+   * `showIdleFrame` calls `anims.stop()`, which would otherwise cut the
+   * attack flipbook (played right after via `playAttack`) back to its first
+   * frame on every single frame it's called, freezing it instead of cycling.
+   */
   public faceDirection(direction: Direction): void {
+    if (this.currentDirection === direction) {
+      return;
+    }
     this.currentDirection = direction;
     this.showIdleFrame();
   }
@@ -473,9 +484,21 @@ export class Player {
    * player. Duplicates of the settled tile or the tile already being
    * headed to are dropped; genuinely new tiles are queued behind the
    * current tween instead of interrupting it.
+   *
+   * While the tab is backgrounded, Phaser's own game loop pauses (so queued
+   * tweens never drain) but the WebSocket keeps delivering moves, which
+   * would otherwise pile up in `pathQueue` and then replay back-to-back at
+   * full speed once the tab regains focus, reading as remote players
+   * suddenly sprinting. Snapping straight to each update instead keeps
+   * state in sync with zero backlog; normal tweened movement resumes on the
+   * next update once the tab is visible again.
    */
   public applyRemoteMove(tile: GridPosition): void {
     if (this.isSettledAt(tile) || this.isHeadingTo(tile)) {
+      return;
+    }
+    if (document.hidden) {
+      this.teleportTo(tile);
       return;
     }
     if (this.isMoving()) {

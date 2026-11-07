@@ -283,8 +283,32 @@ export const MOB_DRAG_DATA_TYPE = "application/x-fso-mob-type-id";
 /** Fixed combat numbers from the mob system spec: a player's hit always removes this much mob HP; both a player's and a mob's attack can land at most once per this cooldown, with the very first hit on contact landing immediately (no cooldown wait) — see fso_web_server's zoneserver.MapCell.Attack/tickMobs. */
 export const PLAYER_ATTACK_DAMAGE = 5;
 export const ATTACK_COOLDOWN_MS = 1000;
-/** An attack lands if the target is on the attacker's own tile or exactly one tile ahead in their facing direction. */
+/** An attack lands if the target is on the attacker's own tile or up to `mobAttackRangeTiles(mobType.size)` tiles ahead in their facing direction — 1 tile at the default size (see MOB_SIZE_DEFAULT). */
 export const ATTACK_RANGE_TILES = 1;
+
+/** MobTypeDef.size bounds/default/slider-step, in tiles/blocks — "de 1/4 de bloco até 5 blocos" per the mob size spec. */
+export const MOB_SIZE_MIN = 0.25;
+export const MOB_SIZE_MAX = 5;
+export const MOB_SIZE_DEFAULT = 1;
+export const MOB_SIZE_STEP = 0.25;
+
+/** MobTypeDef.size, defaulting to MOB_SIZE_DEFAULT for maps saved before the field existed — mirrors fso_web_server's zoneserver.mobSize's zero-defaulting exactly. */
+export function resolveMobSize(size: number | undefined): number {
+  return size && size > 0 ? size : MOB_SIZE_DEFAULT;
+}
+
+/**
+ * Converts a mob's size (a size×size tile footprint centered on its own
+ * tile) into how many tiles straight ahead its melee reaches — mirrors
+ * fso_web_server's zoneserver.mobAttackRangeTiles exactly (same formula),
+ * used client-side only for the mouse-driven chase's "stop and swing" check
+ * (see GameScene's `isAdjacentForAttack`); the server is the sole authority
+ * on whether a hit actually lands.
+ */
+export function mobAttackRangeTiles(size: number): number {
+  const clamped = Math.max(1, size);
+  return Math.floor((clamped - 1) / 2) + 1;
+}
 
 /** Camera follow smoothing factor (0 = instant snap, 1 = never catches up). */
 export const CAMERA_LERP = 0.12;

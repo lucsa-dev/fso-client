@@ -1,5 +1,5 @@
 import type { MobAggressiveness, MobTypeDef } from "@/types/MapTypes";
-import { DEFAULT_MOB_SKIN, isMobSkinId, MOB_SKINS, type MobSkinId } from "@/utils/Constants";
+import { DEFAULT_MOB_SKIN, isMobSkinId, MOB_SIZE_DEFAULT, MOB_SIZE_MAX, MOB_SIZE_MIN, MOB_SIZE_STEP, MOB_SKINS, type MobSkinId } from "@/utils/Constants";
 import { createMobSkinThumbnail } from "@/utils/MobSkinAssets";
 
 const AGGRESSIVENESS_OPTIONS: ReadonlyArray<{ value: MobAggressiveness; label: string }> = [
@@ -83,6 +83,7 @@ export class MobEditorModal {
     nameInput.value = initialMobType?.name ?? "";
     this.createSkinRow(dialog);
     const strengthSlider = this.createSliderField(dialog, "Força (dano por hit)", 1, 100, initialMobType?.strength ?? DEFAULT_STRENGTH);
+    const sizeSlider = this.createSliderField(dialog, "Tamanho (em blocos)", MOB_SIZE_MIN, MOB_SIZE_MAX, initialMobType?.size ?? MOB_SIZE_DEFAULT, MOB_SIZE_STEP);
     this.createAggressivenessRow(dialog);
     const hpInput = this.createNumberField(dialog, "Vida", 1, initialMobType?.maxHp ?? DEFAULT_MAX_HP);
     const defendedTilesInput = this.createNumberField(dialog, "Quadros defendidos (região protegida)", 0, initialMobType?.defendedTiles ?? DEFAULT_DEFENDED_TILES);
@@ -116,6 +117,7 @@ export class MobEditorModal {
         strength: Number(strengthSlider.value),
         aggressiveness: this.selectedAggressiveness,
         maxHp: Math.max(1, Number(hpInput.value) || DEFAULT_MAX_HP),
+        size: Math.min(MOB_SIZE_MAX, Math.max(MOB_SIZE_MIN, Number(sizeSlider.value) || MOB_SIZE_DEFAULT)),
         defendedTiles: Math.max(0, Number(defendedTilesInput.value) || 0),
         xp: Math.max(0, Number(xpInput.value) || 0),
         spawnCount: Math.max(1, Number(spawnCountInput.value) || DEFAULT_SPAWN_COUNT),
@@ -157,7 +159,7 @@ export class MobEditorModal {
     return input;
   }
 
-  private createSliderField(parent: HTMLElement, label: string, min: number, max: number, defaultValue: number): HTMLInputElement {
+  private createSliderField(parent: HTMLElement, label: string, min: number, max: number, defaultValue: number, step = 1): HTMLInputElement {
     const wrap = this.fieldWrap(parent, label);
     const row = document.createElement("div");
     row.style.cssText = "display: flex; align-items: center; gap: 8px;";
@@ -166,6 +168,7 @@ export class MobEditorModal {
     slider.type = "range";
     slider.min = String(min);
     slider.max = String(max);
+    slider.step = String(step);
     slider.value = String(defaultValue);
     slider.style.cssText = "flex: 1; accent-color: #c9a24a;";
 
