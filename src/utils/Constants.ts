@@ -340,8 +340,8 @@ export const ASSET_PATHS = {
 } as const;
 
 /** Dimensions used for procedurally generated (empty) neighbor maps, matching the starter map's grid. */
-export const DEFAULT_MAP_WIDTH = 64;
-export const DEFAULT_MAP_HEIGHT = 64;
+export const DEFAULT_MAP_WIDTH = 32;
+export const DEFAULT_MAP_HEIGHT = 32;
 
 /** Dev-only: the fso_web_server gateway's host — matches whatever host the client itself was loaded from, so it also works when reached over the LAN by IP instead of localhost. */
 const GATEWAY_HOST =
